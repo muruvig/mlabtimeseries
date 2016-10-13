@@ -42,4 +42,4 @@ data_reading.close()
 data_reading = open('CalIt2.events.txt')
 pts = data_reading.read().split('\n')
 events = [pt.split(',')[0:3] for pt in pts]
-
+data_reading.close()
