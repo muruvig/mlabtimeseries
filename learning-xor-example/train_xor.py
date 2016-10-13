@@ -9,24 +9,33 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import rnn, rnn_cell
+import math
 
 # filename_queue = tf.train.string_input_producer(["xor.csv"])
 # reader = tf.TextLineReader()
 # key, value = reader.read(filename_queue)
 # Parameters
 learning_rate = 0.01
-training_iters = 90000
-display_step = 10
-batch_size = 100
+training_iters = 1000
+display_step = 1
+batch_size = 10
 
-test_iters = 10000
+# test_iters = 1000
 # Network Parameters
 n_input = 1 #scalar inputs at each time step
 n_steps = 2 # timesteps
 n_hidden = 3 # hidden layer num of features
-n_classes = 1 #either 0 or 1
+n_classes = 2 #either 0 or 1
 
-optimizer = tf.train.AdamOptimizer(learning_rate= learning_rate)
+
+def dense_to_one_hot(labels_dense, num_classes = n_classes):
+    """Convert class labels from scalars to one-hot vectors"""
+    num_labels = labels_dense.shape[0]
+    index_offset = numpy.arange(num_labels) * num_classes
+    labels_one_hot = numpy.zeros((num_labels, num_classes))
+    labels_one_hot.flat[index_offset + labels_dense.ravel()] = 1
+
+    return labels_one_hot
 
 def read_my_file_format(filename_queue):
   reader = tf.TextLineReader()
@@ -51,20 +60,7 @@ def input_pipeline(batch_size, num_epochs=None):
   example_batch, label_batch = tf.train.shuffle_batch(
       [example, label], batch_size=batch_size, capacity=capacity,
       min_after_dequeue=min_after_dequeue)
-  return example_batch, label_batch
-
-
-# tf Graph input
-x = tf.placeholder("float", [None, n_steps, n_input])
-y = tf.placeholder("float", [None, n_classes])
-
-# Define weights
-weights = {
-    'out': tf.Variable(tf.random_normal([n_hidden, n_classes]))
-}
-biases = {
-    'out': tf.Variable(tf.random_normal([n_classes]))
-}
+  return example_batch.eval(), dense_to_one_hot(label_batch.eval())
 
 def RNN(x, weights, biases):
     # Prepare data shape to match `rnn` function requirements
@@ -79,7 +75,7 @@ def RNN(x, weights, biases):
     x = tf.split(0, n_steps, x)
 
     # Define a lstm cell with tensorflow
-    lstm_cell = rnn_cell.BasicLSTMCell(n_hidden, forget_bias=1.0)
+    lstm_cell = rnn_cell.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
 
     # Get lstm cell output
     outputs, states = rnn.rnn(lstm_cell, x, dtype=tf.float32)
@@ -87,32 +83,59 @@ def RNN(x, weights, biases):
     # Linear activation, using rnn inner loop last output
     return tf.matmul(outputs[-1], weights['out']) + biases['out']
 
-pred = RNN(x, weights, biases)
-
-# Define loss and optimizer
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
-optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
-
-# Evaluate model
-correct_pred = tf.equal(pred, y)
-accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-
-init = tf.initialize_all_variables()
 
 with tf.Session() as sess:
+
+    # tf Graph input
+    x = tf.placeholder("float", [None, n_steps, n_input])
+    y = tf.placeholder("float", [None, n_classes])
+
+    # Define weights
+    weights = {
+        'out': tf.Variable(tf.random_normal([n_hidden, n_classes]))
+    }
+    biases = {
+        'out': tf.Variable(tf.random_normal([n_classes]))
+    }
+
+    pred = RNN(x, weights, biases)
+
+    # Define loss and optimizer
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+
+    # Evaluate model
+    correct_pred = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
+    init = tf.initialize_all_variables()
+
     sess.run(init)
+    coord = tf.train.Coordinator()
+    threads = tf.train.start_queue_runners(coord=coord)
     step = 1
     # Keep training until reach max iterations
     while step * batch_size < training_iters:
+        print(step)
         batch_x, batch_y = input_pipeline(batch_size)
-        batch_x = batch_x.reshape((batch_size, n_steps, n_input))
+        print("got batches")
+
+        bx = batch_x
+        print("evaled x")
+
+        by = batch_y
+        print("evaled y")
+
+        # bx, by = sess.run([batch_x, batch_y])
+        # print("done w sess run first")
+        #batch_x = batch_x.reshape((batch_size, n_steps, n_input))
         # Run optimization op (backprop)
-        sess.run(optimizer, feed_dict={x: batch_x, y: batch_y})
+        sess.run(optimizer, feed_dict={x: bx, y: by})
+        print("done w optimizer")
         if step % display_step == 0:
             # Calculate batch accuracy
-            acc = sess.run(accuracy, feed_dict={x: batch_x, y: batch_y})
+            acc = sess.run(accuracy, feed_dict={x: bx, y: by})
             # Calculate batch loss
-            loss = sess.run(cost, feed_dict={x: batch_x, y: batch_y})
+            loss = sess.run(cost, feed_dict={x: bx, y: by})
             print("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
                   "{:.6f}".format(loss) + ", Training Accuracy= " + \
                   "{:.5f}".format(acc))
@@ -120,4 +143,7 @@ with tf.Session() as sess:
 
     #@TODO: test
 
+
+    coord.request_stop()
+    coord.join(threads)
     print("Optimization Finished!")
