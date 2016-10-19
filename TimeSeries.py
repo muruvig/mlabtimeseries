@@ -47,12 +47,24 @@ class Generator:
             sigma = kwargs["sigma"]
         else:
             sigma = 1.3
+        if "period" in kwargs:
+            period = kwargs["period"]
+        else:
+            period = 10
 
         X = np.zeros((n, 1))
-        X[0] = np.random.randn()
-        for k in xrange(1, n):
-            X[k] =  np.random.randn()*sigma + sum([alpha[i-1]*X[k-i] for i in xrange(1, p+1) if k-i >= 0])
+        interval = n/period
+        rem = n%period
+        for i in xrange(interval):
+            rangedata = autoregressive(period, p, alpha, sigma)
+            start, end = i*period, (i+1)*period
+            X[start:end, :] = rangedata
+        if rem > 0:
+            rangedata = autoregressive(rem, p, alpha, sigma)
+            start = interval*period
+            X[start:,:] = rangedata 
         return X
+
 
     def generate_mamodel(self, n, kwargs):
         if "q" in kwargs:
@@ -67,18 +79,42 @@ class Generator:
             theta = kwargs["theta"]
         else:
             theta = [0.8]
+        if "period" in kwargs:
+            period = kwargs["period"]
+        else:
+            period = 10
 
-        X = np.zeros((n,1))
-        X[0] = mu + np.random.randn()
-        epsilon = []
-        for k in xrange(1, n):
-            epsilon.append(np.random.randn())
-            d = len(epsilon) - 1 
-            X[k] = mu + sum([theta[i]*epsilon[d-i] for i in xrange(0, q) if i < q and i < len(epsilon)])
-            if (len(epsilon) > q):
-                epsilon = epsilon[1:]
+        X = np.zeros((n, 1))
+        interval = n/period
+        rem = n%period
+        for i in xrange(interval):
+            rangedata = moving_average(period, q, mu, theta)
+            start, end = i*period, (i+1)*period
+            X[start:end, :] = rangedata
+        if rem > 0:
+            rangedata = moving_average(rem, q, mu, theta)
+            start = interval*period
+            X[start:,:] = rangedata 
         return X
 
+def autoregressive(period, p, alpha, sigma):
+        X = np.zeros((period, 1))
+        X[0] = np.random.randn()
+        for k in xrange(1, period):
+            X[k] =  np.random.randn()*sigma + sum([alpha[i-1]*X[k-i] for i in xrange(1, p+1) if k-i >= 0])
+        return X
+
+def moving_average(period, q, mu, theta):
+    X = np.zeros((period, 1))
+    X[0] = mu + np.random.randn()
+    epsilon = []
+    for k in xrange(1, period):
+        epsilon.append(np.random.randn())
+        d = len(epsilon) - 1 
+        X[k] = mu + sum([theta[i]*epsilon[d-i] for i in xrange(0, q) if i < q and i < len(epsilon)])
+        if (len(epsilon) > q):
+            epsilon = epsilon[1:]
+    return X
 
 
 class TimeSeries:
@@ -86,9 +122,17 @@ class TimeSeries:
         self.time = time
         self.data = data
 
-    def plot(self):
+    def plot(self, **kwargs):
+        if "start" in kwargs:
+            start = kwargs["start"]
+        else:
+            start = 0
+        if "end" in kwargs:
+            end = kwargs["end"]
+        else:
+            end = len(self.data)
         plt.figure()
-        plt.plot(self.time, self.data)
+        plt.plot(self.time[start:end], self.data[start:end])
 
     def data(self):
         return self.data
