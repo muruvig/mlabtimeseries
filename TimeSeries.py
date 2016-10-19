@@ -74,7 +74,7 @@ class Generator:
         for k in xrange(1, n):
             epsilon.append(np.random.randn())
             d = len(epsilon) - 1 
-            X[k] = sum([theta[i]*epsilon[d-i] for i in xrange(0, q) if i < q and i < len(epsilon)])
+            X[k] = mu + sum([theta[i]*epsilon[d-i] for i in xrange(0, q) if i < q and i < len(epsilon)])
             if (len(epsilon) > q):
                 epsilon = epsilon[1:]
         return X
